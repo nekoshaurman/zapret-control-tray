@@ -253,6 +253,45 @@ bool IsPidRunning(DWORD pid) {
     return wait == WAIT_TIMEOUT;
 }
 
+
+std::wstring LowerPath(std::wstring value) {
+    std::replace(value.begin(), value.end(), L'/', L'\\');
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) { return static_cast<wchar_t>(towlower(ch)); });
+    return value;
+}
+
+std::wstring ProcessImagePath(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return L"";
+    }
+
+    wchar_t path[32768]{};
+    DWORD size = static_cast<DWORD>(std::size(path));
+    std::wstring result;
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        result.assign(path, size);
+    }
+    CloseHandle(process);
+    return result;
+}
+
+DWORD FindPidByImagePath(const std::filesystem::path& imagePath) {
+    const std::wstring expected = LowerPath(imagePath.wstring());
+    if (expected.empty()) {
+        return 0;
+    }
+
+    for (const ProcessInfo& process : SnapshotProcesses()) {
+        if (_wcsicmp(process.name.c_str(), imagePath.filename().c_str()) != 0) {
+            continue;
+        }
+        if (LowerPath(ProcessImagePath(process.pid)) == expected && IsPidRunning(process.pid)) {
+            return process.pid;
+        }
+    }
+    return 0;
+}
 std::vector<DWORD> FindProcessTreeByRootPid(DWORD rootPid) {
     std::vector<DWORD> result;
     if (rootPid == 0) {

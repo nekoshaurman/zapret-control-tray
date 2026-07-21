@@ -32,18 +32,11 @@ AppConfig Config::Load() {
 
     AppConfig config;
     config.exePath = ReadString(L"app", L"exePath", L"", path);
-    config.arguments = ReadString(L"app", L"arguments", L"", path);
-    config.processName = ReadString(L"app", L"processName", L"winws.exe", path);
-    config.serviceMenuChoice = ReadString(L"app", L"serviceMenuChoice", L"1", path);
-    config.strategyIndex = ReadString(L"app", L"strategyIndex", L"1", path);
-    config.timeoutMs = GetPrivateProfileIntW(L"app", L"timeoutMs", 5000, path.c_str());
+    config.arguments = ReadString(L"app", L"arguments", L"", path);    config.timeoutMs = GetPrivateProfileIntW(L"app", L"timeoutMs", 5000, path.c_str());
+    config.autoStartDelaySec = GetPrivateProfileIntW(L"app", L"autoStartDelaySec", 10, path.c_str());
     config.autoStart = GetPrivateProfileIntW(L"app", L"autoStart", 0, path.c_str()) != 0;
     config.utilityAutoStart = GetPrivateProfileIntW(L"app", L"utilityAutoStart", 0, path.c_str()) != 0;
     config.debugMode = GetPrivateProfileIntW(L"app", L"debugMode", 0, path.c_str()) != 0;
-    if (config.processName.empty()) {
-        config.processName = L"winws.exe";
-    }
-
     if (config.timeoutMs < 100) {
         config.timeoutMs = 100;
     }
@@ -56,22 +49,11 @@ bool Config::Save(const AppConfig& config) {
     bool ok = true;
 
     ok = WriteString(L"app", L"exePath", config.exePath, path) && ok;
-    ok = WriteString(L"app", L"arguments", config.arguments, path) && ok;
-    ok = WriteString(L"app", L"processName", config.processName, path) && ok;
-    ok = WriteString(L"app", L"serviceMenuChoice", config.serviceMenuChoice, path) && ok;
-    ok = WriteString(L"app", L"strategyIndex", config.strategyIndex, path) && ok;
-    ok = WriteString(L"app", L"timeoutMs", std::to_wstring(config.timeoutMs), path) && ok;
+    ok = WriteString(L"app", L"arguments", config.arguments, path) && ok;    ok = WriteString(L"app", L"timeoutMs", std::to_wstring(config.timeoutMs), path) && ok;
+    ok = WriteString(L"app", L"autoStartDelaySec", std::to_wstring(config.autoStartDelaySec), path) && ok;
     ok = WriteString(L"app", L"autoStart", config.autoStart ? L"1" : L"0", path) && ok;
     ok = WriteString(L"app", L"utilityAutoStart", config.utilityAutoStart ? L"1" : L"0", path) && ok;
     ok = WriteString(L"app", L"debugMode", config.debugMode ? L"1" : L"0", path) && ok;
 
     return ok;
 }
-
-
-
-
-
-
-
-

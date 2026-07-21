@@ -40,13 +40,10 @@ ipch/
 *.tlog
 *.lastbuildstate
 
-# Runtime/local files
 config.ini
 *.log
 *.log.*
-ZapretControl-install-service.bat
 
-# OS/editor noise
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -55,6 +52,5 @@ desktop.ini
 .vscode/
 .idea/
 
-# Codex/local agent state
 .agents/
 .codex/

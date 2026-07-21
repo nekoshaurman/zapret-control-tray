@@ -7,10 +7,8 @@
 struct AppConfig {
     std::wstring exePath;
     std::wstring arguments;
-    std::wstring processName;
-    std::wstring serviceMenuChoice = L"1";
-    std::wstring strategyIndex = L"1";
     DWORD timeoutMs = 5000;
+    DWORD autoStartDelaySec = 10;
     bool autoStart = false;
     bool utilityAutoStart = false;
     bool debugMode = false;
@@ -22,5 +20,3 @@ public:
     static bool Save(const AppConfig& config);
     static std::wstring Path();
 };
-
-

@@ -19,6 +19,7 @@ namespace {
 constexpr wchar_t kMainClassName[] = L"ZapretControlMessageWindow";
 constexpr wchar_t kMutexName[] = L"Local\\ZapretControlSingleInstance";
 constexpr UINT_PTR kTrayRetryTimerId = 1;
+constexpr UINT_PTR kAutoStartTimerId = 2;
 constexpr UINT kTrayRetryIntervalMs = 1000;
 UINT g_taskbarCreatedMessage = 0;
 
@@ -33,6 +34,13 @@ struct AppState {
     bool trayRetryLogged = false;
 };
 
+
+void UpdateTrayStatus(AppState* state) {
+    if (!state || !state->tray || !state->processManager) {
+        return;
+    }
+    state->tray->SetStatus(state->running, state->config, state->processManager->Pid());
+}
 void EnsureTrayIcon(HWND hwnd, AppState* state) {
     if (!state || !state->tray) {
         return;
@@ -40,7 +48,7 @@ void EnsureTrayIcon(HWND hwnd, AppState* state) {
 
     if (state->tray->Add()) {
         KillTimer(hwnd, kTrayRetryTimerId);
-        state->tray->SetRunning(state->running);
+        UpdateTrayStatus(state);
         state->trayRetryLogged = false;
         Logger::Info(L"Tray icon is present");
         return;
@@ -102,15 +110,19 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
 
         if (state->config.autoStart) {
             Logger::Info(L"AutoStart enabled: starting controlled app");
-            state->running = state->processManager->Start();
-            state->tray->SetRunning(state->running);
+            if (state->config.autoStartDelaySec == 0) {
+                state->running = state->processManager->Start();
+                UpdateTrayStatus(state);
+            } else {
+                SetTimer(hwnd, kAutoStartTimerId, state->config.autoStartDelaySec * 1000, nullptr);
+            }
         }
         return 0;
 
     case WM_APP_TRAYICON:
         Logger::Info(L"Tray callback lParam=" + std::to_wstring(static_cast<unsigned long long>(lParam)));
         if (LOWORD(lParam) == WM_RBUTTONUP || LOWORD(lParam) == WM_CONTEXTMENU) {
-            state->tray->SetRunning(state->running);
+            UpdateTrayStatus(state);
             Logger::Info(L"Showing tray menu");
             state->tray->ShowMenu(state->config, state->strategies);
         } else if (LOWORD(lParam) == WM_LBUTTONDBLCLK) {
@@ -141,13 +153,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             } else {
                 ShowLastError(hwnd, L"Failed to start script");
             }
-            state->tray->SetRunning(state->running);
+            UpdateTrayStatus(state);
             return 0;
 
         case IDM_TRAY_STOP:
             Logger::Info(L"Menu command: Stop winws.exe");
             state->processManager->StopAsync(false);
-            state->tray->SetRunning(state->running);
+            UpdateTrayStatus(state);
             return 0;
 
         case IDM_TRAY_RESTART:
@@ -155,7 +167,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             if (!state->processManager->RestartAsync()) {
                 Logger::Info(L"Restart fallback: starting controlled app directly");
                 state->running = state->processManager->Start();
-                state->tray->SetRunning(state->running);
+                UpdateTrayStatus(state);
             }
             return 0;
 
@@ -188,16 +200,23 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
         Logger::Info(L"Controlled process exited pid=" + std::to_wstring(static_cast<DWORD>(wParam)));
         state->processManager->OnProcessExited(static_cast<DWORD>(wParam));
         state->running = false;
-        state->tray->SetRunning(false);
+        UpdateTrayStatus(state);
         return 0;
 
     case WM_APP_PROCESS_STOPPED:
         Logger::Info(L"Controlled process stopped restart=" + std::to_wstring(wParam != 0));
         state->running = state->processManager->OnProcessStopped(wParam != 0);
-        state->tray->SetRunning(state->running);
+        UpdateTrayStatus(state);
         return 0;
 
     case WM_TIMER:
+        if (wParam == kAutoStartTimerId) {
+            KillTimer(hwnd, kAutoStartTimerId);
+            Logger::Info(L"Delayed autostart timer fired");
+            state->running = state->processManager->Start();
+            UpdateTrayStatus(state);
+            return 0;
+        }
         if (wParam == kTrayRetryTimerId) {
             EnsureTrayIcon(hwnd, state);
             return 0;
@@ -207,6 +226,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
     case WM_DESTROY:
         Logger::Info(L"Main window WM_DESTROY");
         KillTimer(hwnd, kTrayRetryTimerId);
+        KillTimer(hwnd, kAutoStartTimerId);
         if (state) {
             if (state->tray) {
                 state->tray->Remove();
@@ -291,5 +311,3 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
     CloseHandle(mutex);
     return static_cast<int>(msg.wParam);
 }
-
-

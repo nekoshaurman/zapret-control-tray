@@ -21,6 +21,8 @@
 #define IDC_AUTOSTART                   50005
 #define IDC_UTILITY_AUTOSTART           50011
 #define IDC_DEBUG_MODE                  50012
+#define IDC_REFRESH_STRATEGIES          50013
+#define IDC_START_DELAY                 50014
 #define IDC_BROWSE                      50006
 #define IDC_SAVE                        50007
 #define IDC_CANCEL                      50008

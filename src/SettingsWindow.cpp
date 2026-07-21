@@ -76,6 +76,16 @@ std::wstring CurrentExePath() {
     return path;
 }
 
+
+std::wstring Trim(const std::wstring& value) {
+    const wchar_t* whitespace = L" \t\r\n";
+    size_t begin = value.find_first_not_of(whitespace);
+    if (begin == std::wstring::npos) {
+        return L"";
+    }
+    size_t end = value.find_last_not_of(whitespace);
+    return value.substr(begin, end - begin + 1);
+}
 bool ApplyUtilityAutoStart(bool enabled) {
     constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     constexpr wchar_t kRunValue[] = L"ZapretControl";
@@ -109,6 +119,36 @@ bool ApplyUtilityAutoStart(bool enabled) {
     return ok;
 }
 
+
+std::wstring NormalizePathForCompare(std::wstring value) {
+    value = Trim(value);
+    if (value.size() >= 2 && value.front() == L'"' && value.back() == L'"') {
+        value = value.substr(1, value.size() - 2);
+    }
+    return value;
+}
+
+bool IsUtilityAutoStartEnabled() {
+    constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    constexpr wchar_t kRunValue[] = L"ZapretControl";
+
+    HKEY key = nullptr;
+    LONG result = RegOpenKeyExW(HKEY_CURRENT_USER, kRunKey, 0, KEY_QUERY_VALUE, &key);
+    if (result != ERROR_SUCCESS) {
+        return false;
+    }
+
+    wchar_t value[MAX_PATH * 2]{};
+    DWORD type = 0;
+    DWORD size = sizeof(value);
+    result = RegQueryValueExW(key, kRunValue, nullptr, &type, reinterpret_cast<BYTE*>(value), &size);
+    RegCloseKey(key);
+    if (result != ERROR_SUCCESS || type != REG_SZ) {
+        return false;
+    }
+
+    return _wcsicmp(NormalizePathForCompare(value).c_str(), CurrentExePath().c_str()) == 0;
+}
 void LogControl(HWND hwnd, const wchar_t* name) {
     if (hwnd) {
         Logger::Info(std::wstring(L"Created control: ") + name);
@@ -252,30 +292,31 @@ void SettingsWindow::CreateControls() {
     LogControl(AddButton(hwnd_, IDC_BROWSE, 462, 17, 70, 26, L"Browse"), L"Browse button");
 
     LogControl(AddLabel(hwnd_, 16, 58, 130, 22, L"Strategy:"), L"Strategy label");
-    LogControl(AddCombo(hwnd_, IDC_STRATEGY_INDEX, 150, 56, 382, 180), L"Strategy combo");
+    LogControl(AddCombo(hwnd_, IDC_STRATEGY_INDEX, 150, 56, 284, 180), L"Strategy combo");
+    LogControl(AddButton(hwnd_, IDC_REFRESH_STRATEGIES, 444, 55, 88, 26, L"Refresh"), L"Refresh strategies button");
 
     LogControl(AddLabel(hwnd_, 16, 96, 130, 22, L"Extra args:"), L"Extra args label");
     LogControl(AddEdit(hwnd_, IDC_ARGUMENTS, 150, 94, 382, 24), L"Extra args edit");
 
-    LogControl(AddLabel(hwnd_, 16, 134, 130, 22, L"Target process:"), L"Process name label");
-    LogControl(AddEdit(hwnd_, IDC_PROCESS_NAME, 150, 132, 382, 24), L"Process name edit");
+    LogControl(AddLabel(hwnd_, 16, 134, 130, 22, L"Timeout, ms:"), L"Timeout label");
+    LogControl(AddEdit(hwnd_, IDC_TIMEOUT, 150, 132, 120, 24), L"Timeout edit");
 
-    LogControl(AddLabel(hwnd_, 16, 172, 130, 22, L"Timeout, ms:"), L"Timeout label");
-    LogControl(AddEdit(hwnd_, IDC_TIMEOUT, 150, 170, 120, 24), L"Timeout edit");
+    LogControl(AddLabel(hwnd_, 290, 134, 130, 22, L"Start delay, sec:"), L"Start delay label");
+    LogControl(AddEdit(hwnd_, IDC_START_DELAY, 412, 132, 120, 24), L"Start delay edit");
 
     LogControl(CreateWindowExW(0, L"BUTTON", L"Start controlled application with this utility",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        150, 208, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_AUTOSTART)), instance_, nullptr),
+        150, 176, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_AUTOSTART)), instance_, nullptr),
         L"Controlled app autostart checkbox");
 
     LogControl(CreateWindowExW(0, L"BUTTON", L"Run Zapret Control when Windows starts",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        150, 240, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_UTILITY_AUTOSTART)), instance_, nullptr),
+        150, 208, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_UTILITY_AUTOSTART)), instance_, nullptr),
         L"Utility autostart checkbox");
 
     LogControl(CreateWindowExW(0, L"BUTTON", L"Debug logging",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        150, 272, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_DEBUG_MODE)), instance_, nullptr),
+        150, 240, 382, 24, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_DEBUG_MODE)), instance_, nullptr),
         L"Debug logging checkbox");
 
     LogControl(AddButton(hwnd_, IDC_SAVE, 346, 340, 88, 28, L"Save"), L"Save button");
@@ -293,9 +334,9 @@ void SettingsWindow::LoadValues() {
     const std::wstring folder = StrategyFolderFromPath(config_->exePath).wstring();
     SetText(IDC_EXE_PATH, folder);
     LoadStrategies(folder, config_->exePath);
-    SetText(IDC_ARGUMENTS, config_->arguments);
-    SetText(IDC_PROCESS_NAME, config_->processName);
-    SetText(IDC_TIMEOUT, std::to_wstring(config_->timeoutMs));
+    SetText(IDC_ARGUMENTS, config_->arguments);    SetText(IDC_TIMEOUT, std::to_wstring(config_->timeoutMs));
+    SetText(IDC_START_DELAY, std::to_wstring(config_->autoStartDelaySec));
+    config_->utilityAutoStart = IsUtilityAutoStartEnabled();
     SendDlgItemMessageW(hwnd_, IDC_AUTOSTART, BM_SETCHECK, config_->autoStart ? BST_CHECKED : BST_UNCHECKED, 0);
     SendDlgItemMessageW(hwnd_, IDC_UTILITY_AUTOSTART, BM_SETCHECK, config_->utilityAutoStart ? BST_CHECKED : BST_UNCHECKED, 0);
     SendDlgItemMessageW(hwnd_, IDC_DEBUG_MODE, BM_SETCHECK, config_->debugMode ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -317,11 +358,6 @@ bool SettingsWindow::SaveValues() {
 
     config_->exePath = strategyPaths_[static_cast<size_t>(selected)].wstring();
     config_->arguments = GetText(IDC_ARGUMENTS);
-    config_->processName = GetText(IDC_PROCESS_NAME);
-    if (config_->processName.empty()) {
-        config_->processName = L"winws.exe";
-    }
-
     try {
         config_->timeoutMs = std::max<DWORD>(100, std::stoul(GetText(IDC_TIMEOUT)));
     } catch (...) {
@@ -418,9 +454,3 @@ void SettingsWindow::SetText(int controlId, const std::wstring& value) {
         Logger::LastError(L"SettingsWindow SetText failed id=" + std::to_wstring(controlId));
     }
 }
-
-
-
-
-
-

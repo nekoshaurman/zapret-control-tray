@@ -28,7 +28,8 @@ void TrayIcon::FillNotifyData(NOTIFYICONDATAW& nid) const {
     if (!nid.hIcon) {
         nid.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     }
-    wcscpy_s(nid.szTip, running_ ? L"Zapret Control: running" : L"Zapret Control: stopped");
+    const std::wstring tip = tooltip_.empty() ? (running_ ? L"Zapret Control: running" : L"Zapret Control: stopped") : tooltip_;
+    wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
 }
 
 bool TrayIcon::Add() {
@@ -70,6 +71,29 @@ void TrayIcon::SetRunning(bool running) {
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
+
+void TrayIcon::SetStatus(bool running, const AppConfig& config, DWORD pid) {
+    running_ = running;
+
+    std::filesystem::path strategy(config.exePath);
+    tooltip_ = running ? L"Zapret Control: running" : L"Zapret Control: stopped";
+    if (!strategy.filename().empty()) {
+        tooltip_ += L" | ";
+        tooltip_ += strategy.filename().wstring();
+    }
+    if (pid != 0) {
+        tooltip_ += L" | PID ";
+        tooltip_ += std::to_wstring(pid);
+    }
+
+    if (!added_) {
+        return;
+    }
+
+    NOTIFYICONDATAW nid{};
+    FillNotifyData(nid);
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
 void TrayIcon::ShowMenu(const AppConfig& config, const std::vector<std::filesystem::path>& strategies) {
     HMENU menu = CreatePopupMenu();
     if (!menu) {

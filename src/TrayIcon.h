@@ -6,6 +6,7 @@
 #include <shellapi.h>
 
 #include <filesystem>
+#include <string>
 #include <vector>
 
 class TrayIcon {
@@ -17,6 +18,7 @@ public:
     void Remove();
     void ShowMenu(const AppConfig& config, const std::vector<std::filesystem::path>& strategies);
     void SetRunning(bool running);
+    void SetStatus(bool running, const AppConfig& config, DWORD pid);
 
 private:
     void FillNotifyData(NOTIFYICONDATAW& nid) const;
@@ -25,4 +27,5 @@ private:
     HWND owner_ = nullptr;
     bool added_ = false;
     bool running_ = false;
+    std::wstring tooltip_;
 };
